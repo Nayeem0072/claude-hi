@@ -1,0 +1,6 @@
+.env
+hi.log
+hi.log.*
+hi.pid
+__pycache__/
+*.pyc
