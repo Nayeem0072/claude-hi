@@ -64,13 +64,13 @@ def handle_signal(signum, frame):
     shutdown[0] = True
 
 
-def seconds_until_start():
+def start_target():
     h, m = map(int, START_TIME.split(":"))
     now = datetime.now()
     target = now.replace(hour=h, minute=m, second=0, microsecond=0)
     if target <= now:
-        return 0
-    return int((target - now).total_seconds())
+        return None  # already past, ping immediately
+    return target
 
 
 def send_hi():
@@ -111,9 +111,11 @@ def send_with_retry():
     return False
 
 
-def countdown(total_seconds, label="Next ping in"):
-    for remaining in range(total_seconds, 0, -1):
-        if shutdown[0]:
+def countdown(target_time, label="Next ping in"):
+    # Compare against wall-clock time so macOS sleep/wake doesn't stall the countdown
+    while not shutdown[0]:
+        remaining = int((target_time - datetime.now()).total_seconds())
+        if remaining <= 0:
             break
         h, rem = divmod(remaining, 3600)
         m, s = divmod(rem, 60)
@@ -139,12 +141,13 @@ def main():
     print(f"  log file:  {LOG_FILE}")
     print("=" * 60)
 
-    delay = seconds_until_start()
-    if delay > 0:
+    target = start_target()
+    if target is not None:
+        delay = int((target - datetime.now()).total_seconds())
         h, rem = divmod(delay, 3600)
         m = rem // 60
         log.info("Before %s — waiting %dh %02dm for first ping.", START_TIME, h, m)
-        countdown(delay, label=f"First ping at {START_TIME} in")
+        countdown(target, label=f"First ping at {START_TIME} in")
         if shutdown[0]:
             log.info("Shutdown. Goodbye.")
             return
@@ -155,7 +158,8 @@ def main():
         send_with_retry()
         if shutdown[0]:
             break
-        countdown(INTERVAL_SECONDS)
+        next_ping = datetime.now() + timedelta(seconds=INTERVAL_SECONDS)
+        countdown(next_ping)
 
     log.info("Shutdown. Goodbye.")
 
